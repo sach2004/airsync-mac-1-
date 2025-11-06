@@ -1,9 +1,11 @@
 //
-//  NowPlayingViewModel.swift
+//  MacInfoSyncManager.swift
 //  AirSync
 //
-//  Created by Sameera Sandakelum on 2025-09-17.
+//  COMPLETE FIXED VERSION - Better battery detection logic
+//  Replace your entire file: airsync-mac/Core/Util/MacInfo/MacInfoSyncManager.swift
 //
+
 import Foundation
 internal import Combine
 
@@ -97,14 +99,12 @@ class MacInfoSyncManager: ObservableObject {
             // Fetch now playing info and send device status with music info
             NowPlayingCLI.shared.fetchNowPlaying { [weak self] info in
                 guard let info = info else {
-//                    print("[mac-info-sync] No now playing info")
                     // Still send device status without music info
                     self?.sendDeviceStatusWithoutMusic()
                     return
                 }
                 // MUST update @Published properties on main thread
                 DispatchQueue.main.async {
-//                    print("Now Playing fetched:", info) // debug
                     self?.title = info.title ?? "Unknown Title"
                     self?.artist = info.artist ?? "Unknown Artist"
                     self?.album = info.album ?? "Unknown Album"
@@ -179,8 +179,8 @@ class MacInfoSyncManager: ObservableObject {
         // Get battery info
         let batteryInfo = getBatteryInfo()
 
-    // Use already-updated published artwork (base64) to avoid recomputing before change check
-    let albumArtBase64 = shouldIncludeMusicInfo ? (artworkBase64.isEmpty ? nil : artworkBase64) : nil
+        // Use already-updated published artwork (base64) to avoid recomputing before change check
+        let albumArtBase64 = shouldIncludeMusicInfo ? (artworkBase64.isEmpty ? nil : artworkBase64) : nil
 
         // Build snapshot mirroring the payload we would send
         let musicSnapshot: Snapshot.Music? = {
@@ -205,7 +205,6 @@ class MacInfoSyncManager: ObservableObject {
 
         // Early exit if nothing changed compared to the last sent payload
         guard snapshot != lastSentSnapshot else {
-//            print("[mac-info-sync] No change, Skipping")
             return
         }
 
@@ -222,29 +221,20 @@ class MacInfoSyncManager: ObservableObject {
         // Update last sent trackers
         lastSentSnapshot = snapshot
         if shouldIncludeMusicInfo { lastSentInfo = info }
-
-        // Logging
-//        if shouldIncludeMusicInfo {
-//            print("Sent device status to Android: \(info.title ?? "Unknown") by \(info.artist ?? "Unknown")")
-//        } else {
-//            if batteryInfo.level == -1 {
-//                print("Sent device status update (desktop Mac - no battery)")
-//            } else {
-//                print("Sent device status update (battery: \(batteryInfo.level)%, charging: \(batteryInfo.isCharging))")
-//            }
-//        }
     }
 
     private func getBatteryInfo() -> (level: Int, isCharging: Bool) {
-        // Check if this is a MacBook (Air or Pro) - only these have batteries
+        // ============ CRITICAL FIX ============
+        // Use the new hasBattery() method for reliable detection
         let deviceType = DeviceTypeUtil.deviceTypeDescription()
-        let isMacBook = deviceType.contains("MacBook")
+        let hasBattery = DeviceTypeUtil.hasBattery()
         
-        guard isMacBook else {
+        guard hasBattery else {
             // For desktop Macs (iMac, Mac mini, Mac Pro, Mac Studio), return N/A status
             print("[mac-info-sync] Desktop Mac detected (\(deviceType)) - no battery present")
             return (level: -1, isCharging: false) // -1 indicates N/A
         }
+        // ============ END FIX ============
         
         // Get battery info using pmset command for MacBooks
         if let batteryStatus = BatteryInfo.fetchStatus() {
